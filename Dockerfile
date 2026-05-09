@@ -46,17 +46,20 @@ RUN cmake -G Ninja /src/llvm-project/llvm \
     -DMLIR_INCLUDE_INTEGRATION_TESTS=OFF \
     -DLLVM_PARALLEL_LINK_JOBS="${LLVM_PARALLEL_LINK_JOBS}"
 
-RUN ninja install
+RUN ninja install \
+  && cd / \
+  && rm -rf /build/llvm /src/llvm-project
 
 FROM ubuntu:${UBUNTU_VERSION} AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG LLVM_PROJECT_SHA
 ARG LLVM_INSTALL_PREFIX=/opt/llvm-mlir
+ARG IMAGE_SOURCE_URL="https://github.com/<owner>/llvm-mlir-image"
 
 LABEL org.opencontainers.image.title="LLVM/MLIR Toolchain" \
       org.opencontainers.image.description="Prebuilt LLVM/MLIR toolchain for downstream MLIR-based projects" \
-      org.opencontainers.image.source="https://github.com/agent-theta/llvm-mlir-image" \
+      org.opencontainers.image.source="${IMAGE_SOURCE_URL}" \
       org.opencontainers.image.licenses="Apache-2.0 WITH LLVM-exception" \
       org.opencontainers.image.revision="${LLVM_PROJECT_SHA}"
 
