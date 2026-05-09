@@ -1,0 +1,114 @@
+name: Build LLVM/MLIR image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - llvm-project.sha
+      - .github/workflows/build.yml
+  schedule:
+    - cron: '0 8 * * 1'
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: agent-theta/llvm-mlir
+  UBUNTU_VERSION: '24.04'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read pinned LLVM SHA
+        id: llvm
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q '<exact-llvm-project-commit-sha>' llvm-project.sha; then
+            echo "llvm-project.sha must not contain the placeholder value" >&2
+            exit 1
+          fi
+          line_count="$(wc -l < llvm-project.sha | tr -d ' ')"
+          byte_count="$(wc -c < llvm-project.sha | tr -d ' ')"
+          if [[ "${line_count}" != "1" || "${byte_count}" != "41" ]]; then
+            echo "llvm-project.sha must contain exactly one 40-character SHA plus newline" >&2
+            exit 1
+          fi
+          if ! grep -qxE '[0-9a-f]{40}' llvm-project.sha; then
+            echo "llvm-project.sha must be a 40-character lowercase git SHA" >&2
+            exit 1
+          fi
+          sha="$(< llvm-project.sha)"
+          echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+          echo "short_sha=${sha:0:12}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.llvm.outputs.sha }}-ubuntu${{ env.UBUNTU_VERSION }}
+            type=raw,value=${{ steps.llvm.outputs.short_sha }}-ubuntu${{ env.UBUNTU_VERSION }}
+            type=raw,value=latest-ubuntu${{ env.UBUNTU_VERSION }},enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=LLVM/MLIR Toolchain
+            org.opencontainers.image.description=Prebuilt LLVM/MLIR toolchain for downstream MLIR-based projects
+            org.opencontainers.image.revision=${{ steps.llvm.outputs.sha }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          pull: true
+          build-args: |
+            UBUNTU_VERSION=${{ env.UBUNTU_VERSION }}
+            LLVM_PROJECT_SHA=${{ steps.llvm.outputs.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "## Published LLVM/MLIR image"
+            echo
+            echo "LLVM SHA: \`${{ steps.llvm.outputs.sha }}\`"
+            echo
+            echo "Image digest: \`${{ steps.build.outputs.digest }}\`"
+            echo
+            echo "Recommended pinned reference:"
+            echo
+            echo '```text'
+            echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
