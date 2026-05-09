@@ -27,9 +27,12 @@ RUN set -eu; \
 
 WORKDIR /src
 RUN set -eux; \
-    git clone --filter=blob:none --no-checkout https://github.com/llvm/llvm-project.git llvm-project; \
+    git init llvm-project; \
     cd llvm-project; \
-    git checkout "${LLVM_PROJECT_SHA}"
+    git remote add origin https://github.com/llvm/llvm-project.git; \
+    git fetch --depth=1 origin "${LLVM_PROJECT_SHA}"; \
+    git checkout --detach FETCH_HEAD; \
+    test "$(git rev-parse HEAD)" = "${LLVM_PROJECT_SHA}"
 
 WORKDIR /build/llvm
 RUN cmake -G Ninja /src/llvm-project/llvm \
@@ -55,7 +58,7 @@ FROM ubuntu:${UBUNTU_VERSION} AS runtime
 ARG DEBIAN_FRONTEND=noninteractive
 ARG LLVM_PROJECT_SHA
 ARG LLVM_INSTALL_PREFIX=/opt/llvm-mlir
-ARG IMAGE_SOURCE_URL="https://github.com/<owner>/llvm-mlir-image"
+ARG IMAGE_SOURCE_URL="https://github.com/agent-theta/llvm-mlir-image"
 
 LABEL org.opencontainers.image.title="LLVM/MLIR Toolchain" \
       org.opencontainers.image.description="Prebuilt LLVM/MLIR toolchain for downstream MLIR-based projects" \

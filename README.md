@@ -1,8 +1,6 @@
 # LLVM/MLIR GHCR Image
 
-This repository builds `ghcr.io/<owner>/llvm-mlir`, a GHCR image containing a pinned upstream LLVM/MLIR toolchain installed at `/opt/llvm-mlir`.
-
-Replace `<owner>` with the lowercase GitHub user or organization that owns this repository. The publish workflow computes it from `github.repository_owner` and lowercases it for GHCR compatibility.
+This repository builds `ghcr.io/agent-theta/llvm-mlir`, a GHCR image containing a pinned upstream LLVM/MLIR toolchain installed at `/opt/llvm-mlir`.
 
 It is intended for downstream MLIR-based projects that want fast CI without rebuilding LLVM/MLIR on every pull request.
 
@@ -11,7 +9,7 @@ It is intended for downstream MLIR-based projects that want fast CI without rebu
 Use an LLVM commit tag when you want the image built for a specific pinned LLVM revision:
 
 ```text
-ghcr.io/<owner>/llvm-mlir:<llvm-sha>-ubuntu24.04
+ghcr.io/agent-theta/llvm-mlir:<llvm-sha>-ubuntu24.04
 ```
 
 The publishing workflow also creates a short-SHA tag and `latest-ubuntu24.04` on the default branch. Treat `latest-ubuntu24.04` as a convenience tag only.
@@ -19,7 +17,7 @@ The publishing workflow also creates a short-SHA tag and `latest-ubuntu24.04` on
 Scheduled weekly rebuilds use `--pull` and `no-cache` to refresh Ubuntu package contents. Those rebuilds may republish the same LLVM SHA tags with a different image digest, so treat all tags as mutable. For production CI, prefer digest pinning:
 
 ```text
-ghcr.io/<owner>/llvm-mlir@sha256:<digest>
+ghcr.io/agent-theta/llvm-mlir@sha256:<digest>
 ```
 
 The digest is printed in the GitHub Actions workflow summary after each publish.
@@ -49,7 +47,7 @@ jobs:
   linux:
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/<owner>/llvm-mlir:<llvm-sha>-ubuntu24.04
+      image: ghcr.io/agent-theta/llvm-mlir:<llvm-sha>-ubuntu24.04
 
     permissions:
       contents: read
@@ -82,10 +80,10 @@ jobs:
 
 2. Copy the first field into `llvm-project.sha`. The file must contain exactly one lowercase 40-character SHA plus a newline.
 3. Commit and push to `main`, or run the workflow manually from the `main` branch. Manual runs from other refs build only and do not publish.
-4. Wait for `ghcr.io/<owner>/llvm-mlir` to publish.
+4. Wait for `ghcr.io/agent-theta/llvm-mlir` to publish.
 5. Update downstream consumers to the new tag or digest.
 
-GHCR packages may default to private after the first publish. If needed, set the `ghcr.io/<owner>/llvm-mlir` package visibility to public in GitHub package settings.
+GHCR packages may default to private after the first publish. If needed, set the `ghcr.io/agent-theta/llvm-mlir` package visibility to public in GitHub package settings.
 
 ## Local build and smoke test
 
@@ -94,13 +92,13 @@ Building LLVM/MLIR is expensive and can take significant CPU, memory, disk, and 
 ```bash
 docker build \
   --build-arg LLVM_PROJECT_SHA="$(tr -d '[:space:]' < llvm-project.sha)" \
-  --build-arg IMAGE_SOURCE_URL="https://github.com/<owner>/llvm-mlir-image" \
+  --build-arg IMAGE_SOURCE_URL="https://github.com/agent-theta/llvm-mlir-image" \
   -t llvm-mlir:test .
 
 scripts/smoke-test.sh llvm-mlir:test
 ```
 
-The smoke test checks `llvm-config`, `mlir-opt`, `mlir-tblgen`, the LLVM/MLIR CMake package files, and a minimal downstream CMake configure against `LLVM_DIR`/`MLIR_DIR` inside the image.
+The smoke test checks `llvm-config`, `mlir-opt`, `mlir-tblgen`, the LLVM/MLIR CMake package files, and a minimal downstream C++ executable that includes `mlir/IR/MLIRContext.h`, links `MLIRIR`, builds with CMake/Ninja, and runs inside the image.
 
 ## Reproducibility notes
 

@@ -9,6 +9,7 @@ on:
       - .dockerignore
       - llvm-project.sha
       - .github/workflows/build.yml
+      - scripts/smoke-test.sh
   schedule:
     - cron: '0 8 * * 1'
 
@@ -91,15 +92,39 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.llvm.outputs.sha }}
 
-      - name: Build and publish on main
-        id: build
+      - name: Build image for smoke test
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: ./Dockerfile
-          push: ${{ github.ref == 'refs/heads/main' }}
+          push: false
+          load: true
           pull: true
           no-cache: ${{ github.event_name == 'schedule' }}
+          build-args: |
+            UBUNTU_VERSION=${{ env.UBUNTU_VERSION }}
+            LLVM_PROJECT_SHA=${{ steps.llvm.outputs.sha }}
+            IMAGE_SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
+          tags: |
+            llvm-mlir:ci
+            ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run smoke test
+        shell: bash
+        run: scripts/smoke-test.sh llvm-mlir:ci
+
+      - name: Publish on main
+        id: publish
+        if: github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          pull: true
           build-args: |
             UBUNTU_VERSION=${{ env.UBUNTU_VERSION }}
             LLVM_PROJECT_SHA=${{ steps.llvm.outputs.sha }}
@@ -107,7 +132,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=min
+          cache-to: type=gha,mode=max
 
       - name: Published summary
         if: github.ref == 'refs/heads/main'
@@ -120,12 +145,12 @@ jobs:
             echo
             echo "Image: \`${{ env.REGISTRY }}/${{ steps.image.outputs.name }}\`"
             echo
-            echo "Image digest: \`${{ steps.build.outputs.digest }}\`"
+            echo "Image digest: \`${{ steps.publish.outputs.digest }}\`"
             echo
             echo "Recommended pinned reference:"
             echo
             echo '```text'
-            echo "${{ env.REGISTRY }}/${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}"
+            echo "${{ env.REGISTRY }}/${{ steps.image.outputs.name }}@${{ steps.publish.outputs.digest }}"
             echo '```'
             echo
             echo "Scheduled rebuilds refresh mutable tags; use the digest above for immutable pinning."
