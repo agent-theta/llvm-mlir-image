@@ -79,7 +79,7 @@ jobs:
    ```
 
 2. Copy the first field into `llvm-project.sha`. The file must contain exactly one lowercase 40-character SHA plus a newline.
-3. Commit and push to `main`, or run the workflow manually.
+3. Commit and push to `main`, or run the workflow manually from the `main` branch. Manual runs from other refs build only and do not publish.
 4. Wait for `ghcr.io/agent-theta/llvm-mlir` to publish.
 5. Update downstream consumers to the new exact tag or digest.
 

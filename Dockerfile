@@ -79,6 +79,8 @@ ENV PATH="${LLVM_INSTALL_PREFIX}/bin:${PATH}" \
 
 RUN llvm-config --version \
   && mlir-opt --version \
-  && mlir-tblgen --version
+  && mlir-tblgen --version \
+  && test -f "${MLIR_DIR}/MLIRConfig.cmake" \
+  && test -f "${LLVM_DIR}/LLVMConfig.cmake"
 
 WORKDIR /workspace

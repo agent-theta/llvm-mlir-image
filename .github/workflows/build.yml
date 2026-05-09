@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Read pinned LLVM SHA
         id: llvm
@@ -57,10 +57,11 @@ jobs:
           echo "short_sha=${sha:0:12}" >> "${GITHUB_OUTPUT}"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -68,7 +69,7 @@ jobs:
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -80,14 +81,15 @@ jobs:
             org.opencontainers.image.description=Prebuilt LLVM/MLIR toolchain for downstream MLIR-based projects
             org.opencontainers.image.revision=${{ steps.llvm.outputs.sha }}
 
-      - name: Build and push
+      - name: Build and publish on main
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: ./Dockerfile
-          push: true
+          push: ${{ github.ref == 'refs/heads/main' }}
           pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
           build-args: |
             UBUNTU_VERSION=${{ env.UBUNTU_VERSION }}
             LLVM_PROJECT_SHA=${{ steps.llvm.outputs.sha }}
@@ -96,7 +98,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Summary
+      - name: Published summary
+        if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
           {
@@ -111,4 +114,16 @@ jobs:
             echo '```text'
             echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
             echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Build-only summary
+        if: github.ref != 'refs/heads/main'
+        shell: bash
+        run: |
+          {
+            echo "## Built LLVM/MLIR image (not published)"
+            echo
+            echo "LLVM SHA: \`${{ steps.llvm.outputs.sha }}\`"
+            echo
+            echo "Publishing is restricted to \`refs/heads/main\`; manual runs from other refs are build-only."
           } >> "${GITHUB_STEP_SUMMARY}"
