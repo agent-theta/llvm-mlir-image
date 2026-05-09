@@ -10,12 +10,34 @@ docker run --rm -i "$image" bash -euxo pipefail -s <<'CONTAINER_SCRIPT'
 llvm-config --version
 mlir-opt --version
 mlir-tblgen --version
+FileCheck --version
+llvm-lit --version
 
 test -f "${MLIR_DIR}/MLIRConfig.cmake"
 test -f "${LLVM_DIR}/LLVMConfig.cmake"
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
+
+mkdir -p "${tmpdir}/lit"
+cat > "${tmpdir}/lit/lit.cfg.py" <<'PY'
+import os
+import lit.formats
+
+config.name = "MLIRSmoke"
+config.test_format = lit.formats.ShTest(True)
+config.suffixes = [".mlir"]
+config.test_source_root = os.path.dirname(__file__)
+config.test_exec_root = config.test_source_root
+PY
+
+cat > "${tmpdir}/lit/basic.mlir" <<'MLIR'
+// RUN: mlir-opt %s | FileCheck %s
+module {}
+// CHECK: module
+MLIR
+
+llvm-lit -sv "${tmpdir}/lit"
 
 cat > "${tmpdir}/main.cpp" <<'CPP'
 #include "mlir/IR/MLIRContext.h"

@@ -33,6 +33,8 @@ LLVM/MLIR is installed under:
 /opt/llvm-mlir/lib/cmake/mlir
 ```
 
+The image also includes upstream test utilities such as `FileCheck` and `llvm-lit`.
+
 The image sets:
 
 ```text
@@ -85,6 +87,12 @@ jobs:
 
 GHCR packages may default to private after the first publish. If needed, set the `ghcr.io/agent-theta/llvm-mlir` package visibility to public in GitHub package settings.
 
+## Build-time MLIR verification
+
+The Docker build configures upstream LLVM/MLIR tests and runs `cmake --build . --target check-mlir` in the builder stage before installing the toolchain. This provides build-time verification of the pinned upstream MLIR checkout while keeping integration tests disabled and limiting targets to X86 for CI cost control.
+
+The final runtime image contains the installed toolchain under `/opt/llvm-mlir`, but it does not retain `/build/llvm` or `/src/llvm-project`. As a result, upstream `check-mlir` is build-time verification only and cannot be rerun from the runtime image.
+
 ## Local build and smoke test
 
 Building LLVM/MLIR is expensive and can take significant CPU, memory, disk, and time.
@@ -93,12 +101,17 @@ Building LLVM/MLIR is expensive and can take significant CPU, memory, disk, and 
 docker build \
   --build-arg LLVM_PROJECT_SHA="$(tr -d '[:space:]' < llvm-project.sha)" \
   --build-arg IMAGE_SOURCE_URL="https://github.com/agent-theta/llvm-mlir-image" \
+  --build-arg RUN_MLIR_TESTS=ON \
+  --build-arg LLVM_BUILD_JOBS=2 \
+  --build-arg LLVM_LIT_WORKERS=2 \
   -t llvm-mlir:test .
 
 scripts/smoke-test.sh llvm-mlir:test
 ```
 
-The smoke test checks `llvm-config`, `mlir-opt`, `mlir-tblgen`, the LLVM/MLIR CMake package files, and a minimal downstream C++ executable that includes `mlir/IR/MLIRContext.h`, links `MLIRIR`, builds with CMake/Ninja, and runs inside the image.
+For faster iterative local builds only, you can skip upstream `check-mlir` with `--build-arg RUN_MLIR_TESTS=OFF`.
+
+The smoke test checks `llvm-config`, `mlir-opt`, `mlir-tblgen`, `FileCheck`, `llvm-lit`, the LLVM/MLIR CMake package files, a tiny lit/FileCheck MLIR test, and a minimal downstream C++ executable that includes `mlir/IR/MLIRContext.h`, links `MLIRIR`, builds with CMake/Ninja, and runs inside the image.
 
 ## Reproducibility notes
 

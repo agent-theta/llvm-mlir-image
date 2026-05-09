@@ -7,6 +7,9 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG LLVM_PROJECT_SHA
 ARG LLVM_INSTALL_PREFIX=/opt/llvm-mlir
 ARG LLVM_PARALLEL_LINK_JOBS=2
+ARG RUN_MLIR_TESTS=ON
+ARG LLVM_BUILD_JOBS=2
+ARG LLVM_LIT_WORKERS=2
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -44,12 +47,26 @@ RUN cmake -G Ninja /src/llvm-project/llvm \
     -DLLVM_ENABLE_LLD=ON \
     -DLLVM_INCLUDE_BENCHMARKS=OFF \
     -DLLVM_INCLUDE_EXAMPLES=OFF \
-    -DLLVM_INCLUDE_TESTS=OFF \
+    -DLLVM_INCLUDE_TESTS=ON \
     -DLLVM_INCLUDE_DOCS=OFF \
+    -DLLVM_INSTALL_UTILS=ON \
     -DMLIR_INCLUDE_INTEGRATION_TESTS=OFF \
+    -DLLVM_LIT_ARGS="-sv --workers=${LLVM_LIT_WORKERS}" \
     -DLLVM_PARALLEL_LINK_JOBS="${LLVM_PARALLEL_LINK_JOBS}"
 
-RUN ninja install \
+RUN set -eu; \
+    test "$(pwd)" = /build/llvm; \
+    case "${RUN_MLIR_TESTS}" in \
+      ON) \
+        cmake --build . --target check-mlir --parallel "${LLVM_BUILD_JOBS}" ;; \
+      OFF) \
+        echo "Skipping upstream MLIR check-mlir because RUN_MLIR_TESTS=${RUN_MLIR_TESTS}" ;; \
+      *) \
+        echo "RUN_MLIR_TESTS must be ON or OFF (got '${RUN_MLIR_TESTS}')" >&2; \
+        exit 1 ;; \
+    esac
+
+RUN cmake --build . --target install --parallel "${LLVM_BUILD_JOBS}" \
   && cd / \
   && rm -rf /build/llvm /src/llvm-project
 
@@ -86,6 +103,8 @@ ENV PATH="${LLVM_INSTALL_PREFIX}/bin:${PATH}" \
 RUN llvm-config --version \
   && mlir-opt --version \
   && mlir-tblgen --version \
+  && FileCheck --version \
+  && llvm-lit --version \
   && test -f "${MLIR_DIR}/MLIRConfig.cmake" \
   && test -f "${LLVM_DIR}/LLVMConfig.cmake"
 
